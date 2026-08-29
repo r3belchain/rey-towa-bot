@@ -331,6 +331,7 @@ export type Database = {
           discord_id: string
           exp: number | null
           last_jukir: string | null
+          last_mancing: string | null
           last_ngojek: string | null
           pity_count: number | null
           stamina: number | null
@@ -347,6 +348,7 @@ export type Database = {
           discord_id: string
           exp?: number | null
           last_jukir?: string | null
+          last_mancing?: string | null
           last_ngojek?: string | null
           pity_count?: number | null
           stamina?: number | null
@@ -363,6 +365,7 @@ export type Database = {
           discord_id?: string
           exp?: number | null
           last_jukir?: string | null
+          last_mancing?: string | null
           last_ngojek?: string | null
           pity_count?: number | null
           stamina?: number | null
