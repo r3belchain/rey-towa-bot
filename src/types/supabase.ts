@@ -324,11 +324,13 @@ export type Database = {
       }
       users: {
         Row: {
+          badges: string[] | null
           bensin: number | null
           bg_url: string | null
           created_at: string | null
           discord_id: string
           exp: number | null
+          last_jukir: string | null
           last_ngojek: string | null
           pity_count: number | null
           stamina: number | null
@@ -338,11 +340,13 @@ export type Database = {
           username: string
         }
         Insert: {
+          badges?: string[] | null
           bensin?: number | null
           bg_url?: string | null
           created_at?: string | null
           discord_id: string
           exp?: number | null
+          last_jukir?: string | null
           last_ngojek?: string | null
           pity_count?: number | null
           stamina?: number | null
@@ -352,11 +356,13 @@ export type Database = {
           username: string
         }
         Update: {
+          badges?: string[] | null
           bensin?: number | null
           bg_url?: string | null
           created_at?: string | null
           discord_id?: string
           exp?: number | null
+          last_jukir?: string | null
           last_ngojek?: string | null
           pity_count?: number | null
           stamina?: number | null

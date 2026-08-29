@@ -11,6 +11,28 @@ import fs from "fs";
 import path from "path";
 import { supabase } from "../../database/supabase.js";
 
+// STORY POOL
+const SUCCESS_STORIES = [
+  "Kamu mengantar mahasiswa ke TOWA University ngebut lewat jalan tikus, dapet tip ekstra!",
+  "Mengantar pesanan kopi dari TOWA Cafe tepat waktu, pelanggan puas dan kasih bintang 5!",
+  "Narik penumpang mbak-mbak kantoran dari TOWA Station, perjalanan lancar tanpa macet!",
+  "Nganterin tamu yang mau check-in ke TOWA Hotel & Resort, jalannya sat-set tapi aman!",
+  "Dapat penumpang bapak-bapak yang ngajak ngobrol seru soal anak perempuannya yang baru masuk TOWA University sepanjang jalan, pas turun bayar lebih!",
+  "Mengantar ibu-ibu pulang dari TOWA Mall bawa belanjaan banyak, dikasih kembaliannya buat kamu!",
+  "Dapat orderan antar dokumen penting ke Balai Kawasan TOWA, bayarannya lumayan banget!",
+  "Dapat penumpang anak sekolah yang telat!",
+  "Nganterin paket sepatu ke TOWA Resident, yang nerima ngasih tip gede!",
+  "Perjalanan malam yang sepi, ngantar penumpang ke Tongkrongan TOWA dengan santai dan dibayar tunai!",
+];
+
+const FAIL_STORIES = [
+  "Ban motormu bocor kena paku di jalan. Penumpang ngomel dan pesan ojek lain. Kamu cuma dapat pengalaman pahit.",
+  "Motor mendadak mogok di tengah jalan raya. Penumpang kapok dan memilih jalan kaki.",
+  "Penumpang lupa bawa dompet dan janji mau transfer, tapi nomormu malah diblokir.",
+  "Terjebak macet total karena ada event di Kawasan TOWA, orderan akhirnya dibatalkan oleh penumpang.",
+  "Udah nunggu 15 menit di titik jemput, eh ternyata dighosting!",
+];
+
 export const data = new SlashCommandBuilder()
   .setName("ngojek")
   .setDescription("Keliling kawasan TOWA untuk mencari penumpang dan T-Coin!");
@@ -37,7 +59,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const currentTC = user.t_coin ?? 0;
   const currentExp = user.exp ?? 0;
 
-  // Validasi Cooldown 
+  // Validasi Cooldown
   const COOLDOWN_MINUTES = 15;
   const now = new Date();
 
@@ -54,7 +76,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
   }
 
-  // Validasi Stamina & Bensin 
+  // Validasi Stamina & Bensin
   if (currentBensin < 10) {
     return interaction.editReply(
       "⛽ **Bensin tidak cukup!** (Butuh 10%). Silakan isi bensin dulu.",
@@ -66,9 +88,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     );
   }
 
-  // Mekanik RNG 
-  const isSuccess = Math.random() < 0.7; 
-  const isDropItem = Math.random() < 0.05; 
+  // Mekanik RNG
+  const isSuccess = Math.random() < 0.7;
+  const isDropItem = Math.random() < 0.05;
 
   let earnedTC = 0;
   let earnedExp = 0;
@@ -79,12 +101,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     earnedTC = Math.floor(Math.random() * (350 - 150 + 1)) + 150;
     earnedExp = 20;
     color = 0x57f287;
-    storyText = `✅ **Narik Sukses!**\nKamu mengantar penumpang ke Alun ALun Batu dan dibayar **${earnedTC} TC**!`;
+
+    storyText = `✅ **Ngojek Sukses!**\n${SUCCESS_STORIES[Math.floor(Math.random() * SUCCESS_STORIES.length)]}`;
   } else {
     earnedTC = 0;
     earnedExp = 5;
     color = 0xed4245;
-    storyText = `💥 **MAMPUS!**\nBan motormu bocor kena paku di jalan. Penumpang ngomel dan pesan ojek lain. Kamu cuma dapat **5 EXP** pengalaman pahit.`;
+
+    storyText = `💥 **MAMPUS!**\n${FAIL_STORIES[Math.floor(Math.random() * FAIL_STORIES.length)]}`;
   }
 
   let dropText = "";
@@ -113,7 +137,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     );
   }
 
-  //  Visual Embed
+  // Visual Embed
   const embed = new EmbedBuilder()
     .setColor(color)
     .setAuthor({
@@ -123,10 +147,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     .setDescription(storyText + dropText)
     .setImage("attachment://gojek.jpg")
     .addFields(
+      {
+        name: "💰 Perolehan",
+        value: `+${earnedTC} TC | +${earnedExp} EXP`,
+        inline: true,
+      },
       { name: "⚡ Sisa Stamina", value: `${newStamina}/100`, inline: true },
       { name: "⛽ Sisa Bensin", value: `${newBensin}%`, inline: true },
+      { name: "⏳ Cooldown", value: "15 Menit", inline: true },
     )
-    .setFooter({ text: "TOWA Economy System • Cooldown: 15 Menit" });
+    .setFooter({ text: "TOWA Economy System • Ngojek" });
 
   const imagePath = path.join(
     process.cwd(),
@@ -144,14 +174,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     console.warn(`⚠️ Peringatan: Gambar tidak ditemukan di path: ${imagePath}`);
   }
 
-  //  Interaktif Button
+  // Interaktif Button
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("btn_ngojek")
       .setLabel("Narik Lagi")
       .setEmoji("🛵")
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(true), // Disabled karena masih CD 15 menit, ini sekadar showcase UI
+      .setDisabled(true), // Disabled karena masih CD 15 menit
     new ButtonBuilder()
       .setCustomId("btn_warkop")
       .setLabel("Ke TOWA Cafe")
