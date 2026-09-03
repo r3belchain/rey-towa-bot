@@ -1,19 +1,30 @@
-import { ChatInputCommandInteraction, Collection } from "discord.js";
-
+import { Collection } from "discord.js";
+import { CommandContext } from "../structures/CommandContext.js";
 
 const cooldowns = new Collection<string, Collection<string, number>>();
 
 /**
- * Middleware untuk mengecek cooldown in-memory 
- * @param interaction Object interaksi Discord
- * @param defaultCooldown Seconds (default: 3 detik)
- * @returns `true` jika bebas cooldown, `false` jika masih cooldown.
+ * Middleware untuk mengecek cooldown in-memory
+ * @param ctx Object CommandContext
+ * @param defaultCooldown Seconds
+ * @returns
  */
 export async function checkCooldown(
-  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
   defaultCooldown: number = 3,
 ): Promise<boolean> {
-  const { commandName, user } = interaction;
+  const userId = ctx.userId;
+
+  let commandName = "unknown";
+  let cmdPrefix = "/";
+
+  if (ctx.isInteraction && ctx.interaction) {
+    commandName = ctx.interaction.commandName;
+  } else if (ctx.message) {
+    cmdPrefix = "r";
+    const args = ctx.message.content.slice(cmdPrefix.length).trim().split(/ +/);
+    commandName = args.shift()?.toLowerCase() || "unknown";
+  }
 
   if (!cooldowns.has(commandName)) {
     cooldowns.set(commandName, new Collection());
@@ -21,27 +32,31 @@ export async function checkCooldown(
 
   const now = Date.now();
   const timestamps = cooldowns.get(commandName)!;
-  const cooldownAmount = defaultCooldown * 1000; 
+  const cooldownAmount = defaultCooldown * 1000;
 
-  if (timestamps.has(user.id)) {
-    const expirationTime = timestamps.get(user.id)!;
+  if (timestamps.has(userId)) {
+    const expirationTime = timestamps.get(userId)!;
 
     if (now < expirationTime) {
       const expiredTimestamp = Math.round(expirationTime / 1000);
 
-      await interaction.reply({
-        content: `⏳ Pelan-pelan! Kamu bisa menggunakan perintah \`/${commandName}\` lagi <t:${expiredTimestamp}:R>.`,
-        ephemeral: true,
-      });
+      const errorMsg = `⏳ Pelan-pelan! Kamu bisa menggunakan perintah \`${cmdPrefix}${commandName}\` lagi <t:${expiredTimestamp}:R>.`;
+
+      if (ctx.isInteraction && ctx.interaction) {
+        await ctx.interaction.reply({
+          content: errorMsg,
+          flags: ["Ephemeral"], 
+        });
+      } else if (ctx.message) {
+        await ctx.message.reply(errorMsg);
+      }
       return false;
     }
   }
 
-+
-  timestamps.set(user.id, now + cooldownAmount);
+  timestamps.set(userId, now + cooldownAmount);
 
-
-  setTimeout(() => timestamps.delete(user.id), cooldownAmount);
+  setTimeout(() => timestamps.delete(userId), cooldownAmount);
 
   return true;
 }

@@ -1,11 +1,10 @@
-import { ChatInputCommandInteraction } from "discord.js";
 import { supabase } from "../database/supabase.js";
-
+import { CommandContext } from "../structures/CommandContext.js";
 
 export let allowedChannelsCache: string[] = [];
 
 /**
- * Memuat allowed channels dari Supabase ke memory 
+ * Memuat allowed channels dari Supabase ke memory
  */
 export async function loadAllowedChannelsCache(): Promise<void> {
   try {
@@ -35,27 +34,39 @@ export async function loadAllowedChannelsCache(): Promise<void> {
 /**
  * Middleware pengecekan channel eksekusi command
  */
-export async function checkChannel(
-  interaction: ChatInputCommandInteraction,
-): Promise<boolean> {
-  const { channelId } = interaction;
+export async function checkChannel(ctx: CommandContext): Promise<boolean> {
+  const channelId = ctx.isInteraction
+    ? ctx.interaction?.channelId
+    : ctx.message?.channelId;
 
-  // jika kosong, maka semua channel diizinkan
+  if (!channelId) return false;
+
   if (allowedChannelsCache.length === 0) {
     return true;
   }
 
-  // Cek langsung dari Memory Cache
+  // Cek Memory Cache
   const isAllowed = allowedChannelsCache.includes(channelId);
 
   if (!isAllowed) {
     const channelMentions = allowedChannelsCache
       .map((id) => `<#${id}>`)
       .join(", ");
-    await interaction.reply({
-      content: `❌ Perintah ini tidak bisa digunakan di channel ini!\nSilakan gunakan di channel: ${channelMentions}`,
-      ephemeral: true,
-    });
+
+    const errorMessage = `❌ Perintah ini tidak bisa digunakan di channel ini!\nSilakan gunakan di channel: ${channelMentions}`;
+
+
+    if (ctx.isInteraction && ctx.interaction) {
+      await ctx.interaction.reply({
+        content: errorMessage,
+        flags: ["Ephemeral"], 
+      });
+    } else if (ctx.message) {
+      await ctx.message.reply({
+        content: errorMessage,
+      });
+    }
+
     return false;
   }
 

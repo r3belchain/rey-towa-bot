@@ -1,15 +1,14 @@
-import { ChatInputCommandInteraction } from "discord.js";
 import { supabase } from "../database/supabase.js";
+import { CommandContext } from "../structures/CommandContext.js";
 
 /**
  * Middleware untuk memeriksa apakah user sudah terdaftar di database Supabase.
- * @param interaction Object interaksi dari Discord.js
- * @returns `true` jika user sudah terdaftar, `false` jika belum (dan mengirim balasan ephemeral).
+ * 
+ * @param ctx Object CommandContext
+ * @returns
  */
-export async function checkRegistration(
-  interaction: ChatInputCommandInteraction,
-): Promise<boolean> {
-  const userId = interaction.user.id;
+export async function checkRegistration(ctx: CommandContext): Promise<boolean> {
+  const userId = ctx.userId;
 
   try {
     const { data: user, error } = await supabase
@@ -20,22 +19,33 @@ export async function checkRegistration(
 
     if (error) {
       console.error("❌ Error Supabase pada checkRegistration:", error.message);
-      await interaction.reply({
-        content:
-          "⚠️ Terjadi kesalahan database saat memverifikasi status akunmu.",
-        ephemeral: true,
-      });
+      const errorMsg =
+        "⚠️ Terjadi kesalahan database saat memverifikasi status akunmu.";
+
+      if (ctx.isInteraction && ctx.interaction) {
+        await ctx.interaction.reply({
+          content: errorMsg,
+          flags: ["Ephemeral"],   
+        });
+      } else if (ctx.message) {
+        await ctx.message.reply(errorMsg);
+      }
       return false;
     }
 
-   
     if (!user) {
-      await interaction.reply({
-        content:
-          "📜 Kamu belum terdaftar!\n" +
-          "Silakan gunakan perintah `/getting-started` terlebih dahulu untuk membuat profil dan memulai petualanganmu.",
-        ephemeral: true,
-      });
+      const unregMsg =
+        "📜 Kamu belum terdaftar!\n" +
+        "Silakan gunakan perintah `/getting-started` terlebih dahulu untuk membuat profil dan memulai petualanganmu.";
+
+      if (ctx.isInteraction && ctx.interaction) {
+        await ctx.interaction.reply({
+          content: unregMsg,
+          flags: ["Ephemeral"], 
+        });
+      } else if (ctx.message) {
+        await ctx.message.reply(unregMsg);
+      }
       return false;
     }
 

@@ -1,16 +1,13 @@
 import {
   ActionRowBuilder,
-  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChatInputCommandInteraction,
   EmbedBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
 } from "discord.js";
 import { supabase } from "../../database/supabase.js";
-import fs from "fs";
-import path from "path";
+import { CommandContext } from "../../structures/CommandContext.js";
 
 // LOOT TABLE & HARGA
 const COMMON_FISH = ["fish_lele", "fish_nila", "fish_mujair"];
@@ -27,7 +24,7 @@ const QUICK_SELL_PRICES: Record<string, number> = {
   fish_belut: 70,
 };
 
-// Map ID ke Nama untuk UI
+// Map ID
 const ITEM_NAMES: Record<string, string> = {
   fish_lele: "🐟 Ikan Lele",
   fish_nila: "🐟 Ikan Nila",
@@ -44,11 +41,11 @@ const ITEM_NAMES: Record<string, string> = {
 
 export const data = new SlashCommandBuilder()
   .setName("mancing")
-  .setDescription("Lempar kail di TOWA Empang dan tunggu tangkapanmu!");
+  .setDescription("Lempar kail di TOWA Fish Pond dan tunggu tangkapanmu!");
 
-export async function execute(interaction: ChatInputCommandInteraction) {
-  await interaction.deferReply();
-  const userId = interaction.user.id;
+export async function execute(ctx: CommandContext) {
+  await ctx.defer();
+  const userId = ctx.userId;
 
   // Get Data Warga
   const { data: user, error: userError } = await supabase
@@ -58,7 +55,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     .maybeSingle();
 
   if (userError || !user) {
-    return interaction.editReply("❌ Kamu belum terdaftar sebagai warga TOWA!");
+    return ctx.editReply("❌ Kamu belum terdaftar sebagai warga TOWA!");
   }
 
   // Cooldown Check
@@ -69,17 +66,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const diffMins = (now.getTime() - lastTime.getTime()) / (1000 * 60);
     if (diffMins < COOLDOWN_MINUTES) {
       const timeLeft = Math.ceil(COOLDOWN_MINUTES - diffMins);
-      return interaction.editReply(
+      return ctx.editReply(
         `⏳ Sabar, ikan belum ngumpul! Tunggu **${timeLeft} menit** lagi.`,
       );
     }
   }
 
-  // 3. Gear Check: Kail Bambu & Umpan
+  //Gear Check Kail Bambu & Umpan
   const { data: inventory, error: invError } = await supabase
     .from("user_inventory")
     .select("id, item_id, durability, quantity")
-    .eq("user_id", userId)
+    .eq("discord_id", userId)
     .in("item_id", ["item_kail_bambu", "item_umpan"]);
 
   const kail = inventory?.find(
@@ -90,15 +87,15 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   );
 
   if (!kail)
-    return interaction.editReply(
+    return ctx.editReply(
       "⚠️ **Kail tidak ditemukan atau sudah rusak!** Beli/Repair dulu.",
     );
   if (!umpan)
-    return interaction.editReply(
+    return ctx.editReply(
       "🐛 **Kamu kehabisan umpan!** Beli umpan di toko dulu.",
     );
 
-  // 4. Kalkulasi Buff (RT 02 Ternak Lele -> +20% Rare Chance)
+  // Kalkulasi Buff
   const { data: roster } = await supabase
     .from("user_roster")
     .select("roster_id")
@@ -108,16 +105,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   const hasLeleBuff = !!roster;
 
-  // 5. RNG Mekanik (Main Catch & Bycatch)
+  // RNG Mekanik 
   let caughtItems: Record<string, number> = {};
   let kailPatah = false;
 
-  // --- TARIKAN UTAMA (Slot 1) ---
+
   const mainRoll = Math.floor(Math.random() * 100) + 1;
-  const rareThreshold = hasLeleBuff ? 10 + 2 : 10; // Base 8% + (jika ada buff, hitungan threshold geser)
+  const rareThreshold = hasLeleBuff ? 10 + 2 : 10;
 
   if (mainRoll <= 2) {
-    kailPatah = true; // 2% Disaster
+    kailPatah = true; 
   } else if (mainRoll <= rareThreshold) {
     const item = RARE_FISH[Math.floor(Math.random() * RARE_FISH.length)];
     caughtItems[item] = 1;
@@ -133,22 +130,21 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     caughtItems[item] = 1;
   }
 
-  // --- TARIKAN TAMBAHAN (Slot 2 & 3) (Hanya jika kail tidak patah) ---
   if (!kailPatah) {
     const bycatchPool = [...COMMON_FISH, ...UNCOMMON_FISH, ...TRASH_ITEMS];
-    // Peluang Slot 2 (40%)
+
     if (Math.random() < 0.4) {
       const item = bycatchPool[Math.floor(Math.random() * bycatchPool.length)];
       caughtItems[item] = (caughtItems[item] || 0) + 1;
     }
-    // Peluang Slot 3 (15%)
+
     if (Math.random() < 0.15) {
       const item = bycatchPool[Math.floor(Math.random() * bycatchPool.length)];
       caughtItems[item] = (caughtItems[item] || 0) + 1;
     }
   }
 
-  // 6. Update Database (Potong Umpan & Durability)
+  // Update Database
   const newUmpanQty = (umpan.quantity ?? 1) - 1;
   await supabase
     .from("user_inventory")
@@ -168,13 +164,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       .eq("id", kail.id);
   }
 
-  // 7. Simpan Ikan ke Inventory
+  // Simpan Ikan
   if (!kailPatah) {
     for (const [itemId, qty] of Object.entries(caughtItems)) {
       const { data: existingItem } = await supabase
         .from("user_inventory")
         .select("id, quantity")
-        .eq("user_id", userId)
+        .eq("discord_id", userId)
         .eq("item_id", itemId)
         .maybeSingle();
 
@@ -185,7 +181,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
           .eq("id", existingItem.id);
       } else {
         await supabase.from("user_inventory").insert({
-          user_id: userId,
+          discord_id: userId,
           item_id: itemId,
           quantity: qty,
           durability: 0,
@@ -200,11 +196,11 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     .update({ exp: (user.exp ?? 0) + 10, last_mancing: now.toISOString() })
     .eq("discord_id", userId);
 
-  // 8. Visual UI Embed (DIROMBAK SESUAI STYLE NGOJEK)
+  // Visual UI Embed
   let resultText = "";
   if (kailPatah) {
     resultText =
-      "💥 **MAMPUS!**\nKailmu ditarik monster empang sampai patah! Umpan hilang, ikan kabur.";
+      "💥 **MAMPUS!**\nKailmu ditarik monster sampai patah! Umpan hilang, ikan kabur.";
   } else {
     resultText =
       "✅ **Strike!**\nKamu berhasil menarik kail dan mendapatkan:\n\n";
@@ -220,8 +216,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const embed = new EmbedBuilder()
     .setColor(kailPatah ? 0xed4245 : 0x3498db)
     .setAuthor({
-      name: `${interaction.user.username} memancing di Empang!`,
-      iconURL: interaction.user.displayAvatarURL(),
+      name: `${ctx.user.username} memancing di Fish Pond!`,
+      iconURL: ctx.user.displayAvatarURL(),
     })
     .setDescription(resultText)
     .addFields(
@@ -236,29 +232,18 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     )
     .setFooter({ text: "TOWA Economy System • Mancing" });
 
-  // Safe Image Attachment
-  const imagePath = path.join(
-    process.cwd(),
-    "src",
-    "assets",
-    "images",
-    "mancing.gif",
+  embed.setImage(
+    "https://cdn.discordapp.com/attachments/1543360295894777856/1543360296192839841/mancing.gif?ex=6a9495c8&is=6a934448&hm=a32dce94a92d59beea4b5c183cac494976469da9bd44e7c3080dfb24d0be73c9&",
   );
-  const files: AttachmentBuilder[] = [];
 
-  if (fs.existsSync(imagePath)) {
-    files.push(new AttachmentBuilder(imagePath, { name: "mancing.gif" }));
-    embed.setImage("attachment://mancing.gif");
-  }
-
-  // 9. Interactive UI Components
+  // Interactive UI Components
   const spotSelect =
     new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("select_fishing_spot")
         .setPlaceholder("📍 Pilih Spot Mancing")
         .addOptions([
-          { 
+          {
             label: "TOWA Fish Pond",
             description: "Spot mancing warga lokal. Rate stabil.",
             value: "spot_empang",
@@ -277,7 +262,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             emoji: "🦈",
           },
         ])
-        .setDisabled(true), // Placeholder, matikan dulu
+        .setDisabled(true), 
     );
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -286,7 +271,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       .setLabel("Lempar Kail")
       .setEmoji("🎣")
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(true), // Disabled default (CD 5 min)
+      .setDisabled(true),
     new ButtonBuilder()
       .setCustomId("sell_fish_npc")
       .setLabel("Jual Cepat (Common & Uncommon)")
@@ -294,73 +279,74 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       .setStyle(ButtonStyle.Success),
   );
 
-  const responseMessage = await interaction.editReply({
+  const responseMessage = await ctx.editReply({
     embeds: [embed],
-    files: files, // MEMASUKKAN GAMBAR KE DALAM REPLY
     components: [spotSelect, buttonRow as any],
   });
 
-  // 10. Collector Tombol Jual Cepat
-  const collector = responseMessage.createMessageComponentCollector({
-    time: 60_000,
-  });
-  collector.on("collect", async (btnInteraction) => {
-    if (btnInteraction.customId === "sell_fish_npc") {
-      if (btnInteraction.user.id !== interaction.user.id) return;
+  // Collector TJual Cepat
+  if (responseMessage && "createMessageComponentCollector" in responseMessage) {
+    const collector = responseMessage.createMessageComponentCollector({
+      time: 60_000,
+    });
+    collector.on("collect", async (btnInteraction) => {
+      if (btnInteraction.customId === "sell_fish_npc") {
+        if (btnInteraction.user.id !== ctx.userId) return;
 
-      const { data: currentInv } = await supabase
-        .from("user_inventory")
-        .select("id, item_id, quantity")
-        .eq("user_id", userId)
-        .gt("quantity", 0);
+        const { data: currentInv } = await supabase
+          .from("user_inventory")
+          .select("id, item_id, quantity")
+          .eq("discord_id", userId)
+          .gt("quantity", 0);
 
-      if (!currentInv)
-        return btnInteraction.reply({
-          content: "Kamu tidak punya ikan untuk dijual.",
-          ephemeral: true,
-        });
+        if (!currentInv)
+          return btnInteraction.reply({
+            content: "Kamu tidak punya ikan untuk dijual.",
+            ephemeral: true,
+          });
 
-      let totalEarned = 0;
-      let soldDetails = "";
+        let totalEarned = 0;
+        let soldDetails = "";
 
-      for (const item of currentInv) {
-        if (QUICK_SELL_PRICES[item.item_id]) {
-          const qty = item.quantity ?? 0;
-          const price = QUICK_SELL_PRICES[item.item_id] * qty;
-          totalEarned += price;
-          soldDetails += `${ITEM_NAMES[item.item_id]} x${qty} = **${price} TC**\n`;
+        for (const item of currentInv) {
+          if (QUICK_SELL_PRICES[item.item_id]) {
+            const qty = item.quantity ?? 0;
+            const price = QUICK_SELL_PRICES[item.item_id] * qty;
+            totalEarned += price;
+            soldDetails += `${ITEM_NAMES[item.item_id]} x${qty} = **${price} TC**\n`;
 
-          // Set quantity 0
-          await supabase
-            .from("user_inventory")
-            .update({ quantity: 0 })
-            .eq("id", item.id);
+          
+            await supabase
+              .from("user_inventory")
+              .update({ quantity: 0 })
+              .eq("id", item.id);
+          }
         }
-      }
 
-      if (totalEarned === 0) {
-        return btnInteraction.reply({
-          content:
-            "⚠️ Tidak ada ikan Common/Uncommon di keranjangmu yang bisa dijual cepat.",
+        if (totalEarned === 0) {
+          return btnInteraction.reply({
+            content:
+              "⚠️ Tidak ada ikan Common/Uncommon di keranjangmu yang bisa dijual cepat.",
+            ephemeral: true,
+          });
+        }
+
+        // Tambah TC
+        const { data: latestUser } = await supabase
+          .from("users")
+          .select("t_coin")
+          .eq("discord_id", userId)
+          .single();
+        await supabase
+          .from("users")
+          .update({ t_coin: (latestUser?.t_coin ?? 0) + totalEarned })
+          .eq("discord_id", userId);
+
+        await btnInteraction.reply({
+          content: `📦 **Jual Cepat Sukses!**\n\n${soldDetails}\n💰 **Total Pendapatan: +${totalEarned} TC**`,
           ephemeral: true,
         });
       }
-
-      // Tambah TC ke User
-      const { data: latestUser } = await supabase
-        .from("users")
-        .select("t_coin")
-        .eq("discord_id", userId)
-        .single();
-      await supabase
-        .from("users")
-        .update({ t_coin: (latestUser?.t_coin ?? 0) + totalEarned })
-        .eq("discord_id", userId);
-
-      await btnInteraction.reply({
-        content: `📦 **Jual Cepat Sukses!**\n\n${soldDetails}\n💰 **Total Pendapatan: +${totalEarned} TC**`,
-        ephemeral: true,
-      });
-    }
-  });
+    });
+  }
 }
